@@ -1,0 +1,6 @@
+pandas
+openpyxl
+requests
+azure-identity
+azure-mgmt-recoveryservicesbackup
+azure-mgmt-compute
