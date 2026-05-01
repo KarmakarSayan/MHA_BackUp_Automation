@@ -85,16 +85,16 @@ for v in vaults:
 
             source_id = getattr(props, "source_resource_id", "")
 
-            # Extract resource group
+            # Resource Group
             resource_group = source_id.split("/")[4] if source_id else "N/A"
 
-            # Extract VM name
+            # VM Name
             azure_resource = source_id.split("/")[-1] if source_id else "N/A"
 
-            # Clean Backup Item Name
+            # Clean Backup Item
             backup_item_name = item.name.split(";")[-1] if item.name else "N/A"
 
-            # Latest Recovery Point
+            # Recovery Point
             last_rp = getattr(props, "last_recovery_point", None)
             if last_rp:
                 last_rp = last_rp.strftime("%Y-%m-%d")
@@ -104,7 +104,7 @@ for v in vaults:
             # Protection State
             protection_state = getattr(props, "protection_state", "N/A")
 
-            # Resource State
+            # Resource State (Portal-aligned)
             resource_state = getattr(props, "resource_state", None)
 
             if not resource_state:
@@ -130,7 +130,7 @@ for v in vaults:
 
 
 # ==========================
-# CREATE DATAFRAME
+# DATAFRAME
 # ==========================
 df = pd.DataFrame(data)
 
@@ -188,14 +188,14 @@ center_align = Alignment(
     vertical="center"
 )
 
-# Header
+# Header styling
 for cell in ws[1]:
     cell.fill = header_fill
     cell.font = header_font
     cell.border = thin_border
     cell.alignment = center_align
 
-# Data
+# Data styling
 for row in ws.iter_rows(
     min_row=2,
     max_row=ws.max_row,
@@ -228,7 +228,7 @@ print(f"\n✅ Report Generated: {file_name}")
 
 
 # ==========================
-# BUILD MAIL SUMMARY
+# SUMMARY COUNTS
 # ==========================
 total_backup_items = len(df)
 
@@ -239,27 +239,94 @@ successful_backup_items = len(
     ]
 )
 
-non_protected_items = df[
+failed_non_protected_items = len(
+    df[
+        (df["Health Check Status"].str.lower() != "passed") |
+        (df["Protection State"].str.lower() != "protected") |
+        (~df["Resource State"].str.lower().isin(["vm active", "n/a"]))
+    ]
+)
+
+
+# ==========================
+# GROUPED NOTES
+# ==========================
+notes = []
+
+# Non-Protected
+non_protected_servers = df[
     df["Protection State"].str.lower() != "protected"
-]
-
-failed_backup_items = len(non_protected_items)
-
-non_protected_servers = non_protected_items["Azure Resource"].tolist()
+]["Azure Resource"].tolist()
 
 if non_protected_servers:
     server_list = ", ".join(non_protected_servers)
+
+    notes.append(
+        f"The following servers — {server_list} — backups are in non-protected state."
+    )
+
+# Health Issues
+health_issue_servers = df[
+    df["Health Check Status"].str.lower() != "passed"
+][["Azure Resource", "Health Check Status"]]
+
+if not health_issue_servers.empty:
+    grouped_health = {}
+
+    for _, row in health_issue_servers.iterrows():
+        status = row["Health Check Status"]
+
+        if status not in grouped_health:
+            grouped_health[status] = []
+
+        grouped_health[status].append(
+            row["Azure Resource"]
+        )
+
+    for status, servers in grouped_health.items():
+        server_list = ", ".join(servers)
+
+        notes.append(
+            f"The following servers — {server_list} — have health check issues ({status})."
+        )
+
+# Resource Issues
+resource_issue_servers = df[
+    ~df["Resource State"].str.lower().isin(["vm active", "n/a"])
+][["Azure Resource", "Resource State"]]
+
+if not resource_issue_servers.empty:
+    grouped_resource = {}
+
+    for _, row in resource_issue_servers.iterrows():
+        state = row["Resource State"]
+
+        if state not in grouped_resource:
+            grouped_resource[state] = []
+
+        grouped_resource[state].append(
+            row["Azure Resource"]
+        )
+
+    for state, servers in grouped_resource.items():
+        server_list = ", ".join(servers)
+
+        notes.append(
+            f"The following servers — {server_list} — are in {state} state."
+        )
+
+# Final Note Section
+if notes:
+    note_text = "<br><br>".join(notes)
+
     note_section = f"""
     <p><b>Note:</b></p>
-    <p>
-    The following servers — {server_list} —
-    backups are in non-protected state.
-    </p>
+    <p>{note_text}</p>
     """
 else:
     note_section = """
     <p><b>Note:</b></p>
-    <p>All backup items are currently protected.</p>
+    <p>All backup items are healthy, protected, and active.</p>
     """
 
 
@@ -289,7 +356,7 @@ Below is the status of all backup items.
     </tr>
     <tr>
         <td><b>Failed / Non-Protected Items</b></td>
-        <td>{failed_backup_items}</td>
+        <td>{failed_non_protected_items}</td>
     </tr>
 </table>
 
@@ -297,12 +364,12 @@ Below is the status of all backup items.
 
 {note_section}
 
-<p>Regards,<br>Automation System</p>
+<p>Regards,<br>Sayan Karmakar</p>
 """
 
 
 # ==========================
-# GRAPH TOKEN FUNCTION
+# GRAPH TOKEN
 # ==========================
 def get_graph_token():
     url = f"https://login.microsoftonline.com/{MAIL_TENANT_ID}/oauth2/v2.0/token"
@@ -321,7 +388,7 @@ def get_graph_token():
 
 
 # ==========================
-# SEND EMAIL FUNCTION
+# SEND EMAIL
 # ==========================
 def send_email_with_attachment():
     token = get_graph_token()
@@ -378,6 +445,6 @@ def send_email_with_attachment():
 
 
 # ==========================
-# SEND REPORT
+# EXECUTE
 # ==========================
 send_email_with_attachment()
