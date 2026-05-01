@@ -5,7 +5,6 @@ import requests
 
 from azure.identity import ClientSecretCredential
 from azure.mgmt.recoveryservicesbackup import RecoveryServicesBackupClient
-from azure.mgmt.compute import ComputeManagementClient
 
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font, Border, Side, Alignment
@@ -71,11 +70,6 @@ for v in vaults:
         v["subscription_id"]
     )
 
-    compute_client = ComputeManagementClient(
-        credential,
-        v["subscription_id"]
-    )
-
     try:
         items = backup_client.backup_protected_items.list(
             vault_name=v["vault_name"],
@@ -107,29 +101,28 @@ for v in vaults:
             else:
                 last_rp = "N/A"
 
-            # Resource State (VM Power State)
-            resource_state = "N/A"
+            # ==========================
+            # BACKUP-CENTRIC RESOURCE STATE
+            # ==========================
+            protection_state = getattr(props, "protection_state", "N/A")
 
-            try:
-                if resource_group != "N/A" and azure_resource != "N/A":
-                    vm = compute_client.virtual_machines.get(
-                        resource_group,
-                        azure_resource,
-                        expand="instanceView"
-                    )
+            if not source_id:
+                resource_state = "VM Not Found"
 
-                    for status in vm.instance_view.statuses:
-                        if "PowerState" in status.code:
-                            resource_state = status.display_status
+            elif "Deleted" in protection_state or "SoftDeleted" in protection_state:
+                resource_state = "Soft Deleted"
 
-            except Exception:
-                resource_state = "Error"
+            elif protection_state == "ProtectionStopped":
+                resource_state = "Protection Stopped"
+
+            else:
+                resource_state = "VM Active"
 
             # Append Data
             data.append({
                 "Backup Item": backup_item_name,
                 "Resource Group": resource_group,
-                "Protection State": getattr(props, "protection_state", "N/A"),
+                "Protection State": protection_state,
                 "Health Check Status": getattr(props, "health_status", "N/A"),
                 "Latest Recovery Point": last_rp,
                 "Resource State": resource_state,
@@ -145,6 +138,10 @@ for v in vaults:
 # CREATE DATAFRAME
 # ==========================
 df = pd.DataFrame(data)
+
+if df.empty:
+    print("❌ No backup data found. Check Azure permissions.")
+    exit()
 
 df = df[
     [
@@ -173,7 +170,7 @@ df.to_excel(file_name, index=False)
 wb = load_workbook(file_name)
 ws = wb.active
 
-# Sky Blue Header
+# Header style
 header_fill = PatternFill(
     start_color="87CEEB",
     end_color="87CEEB",
@@ -185,7 +182,7 @@ header_font = Font(
     color="000000"
 )
 
-# Borders
+# Border style
 thin_border = Border(
     left=Side(style="thin"),
     right=Side(style="thin"),
@@ -199,14 +196,14 @@ center_align = Alignment(
     vertical="center"
 )
 
-# Header Formatting
+# Header formatting
 for cell in ws[1]:
     cell.fill = header_fill
     cell.font = header_font
     cell.border = thin_border
     cell.alignment = center_align
 
-# Data Formatting
+# Data formatting
 for row in ws.iter_rows(
     min_row=2,
     max_row=ws.max_row,
@@ -216,7 +213,7 @@ for row in ws.iter_rows(
         cell.border = thin_border
         cell.alignment = center_align
 
-# Auto Width
+# Auto column width
 for column_cells in ws.columns:
     max_length = 0
     column_letter = column_cells[0].column_letter
@@ -276,7 +273,7 @@ def send_email_with_attachment():
                 "content": """
                 <p>Hello Team,</p>
                 <p>Please find attached the latest Backup Explorer Report.</p>
-                <p>Regards,<br>Automation System</p>
+                <p>Regards,<br>Sayan Karmakar</p>
                 """
             },
             "toRecipients": [
