@@ -102,23 +102,24 @@ for v in vaults:
                 last_rp = "N/A"
 
             # ==========================
-            # BACKUP-CENTRIC RESOURCE STATE
+            # PROTECTION STATE
             # ==========================
             protection_state = getattr(props, "protection_state", "N/A")
 
-            if not source_id:
-                resource_state = "VM Not Found"
+            # ==========================
+            # RESOURCE STATE
+            # ==========================
+            resource_state = getattr(props, "resource_state", None)
 
-            elif "Deleted" in protection_state or "SoftDeleted" in protection_state:
-                resource_state = "Soft Deleted"
+            if not resource_state:
+                if not source_id:
+                    resource_state = "VM Not Found"
+                else:
+                    resource_state = "VM Active"
 
-            elif protection_state == "ProtectionStopped":
-                resource_state = "Protection Stopped"
-
-            else:
-                resource_state = "VM Active"
-
-            # Append Data
+            # ==========================
+            # APPEND DATA
+            # ==========================
             data.append({
                 "Backup Item": backup_item_name,
                 "Resource Group": resource_group,
@@ -142,6 +143,7 @@ df = pd.DataFrame(data)
 if df.empty:
     print("❌ No backup data found. Check Azure permissions.")
     exit()
+
 
 df = df[
     [
@@ -170,19 +172,19 @@ df.to_excel(file_name, index=False)
 wb = load_workbook(file_name)
 ws = wb.active
 
-# Header style
+# Header Style
 header_fill = PatternFill(
-    start_color="87CEEB",
+    start_color="87CEEB",   # Sky blue
     end_color="87CEEB",
     fill_type="solid"
 )
 
 header_font = Font(
     bold=True,
-    color="000000"
+    color="000000"  # Black
 )
 
-# Border style
+# Border Style
 thin_border = Border(
     left=Side(style="thin"),
     right=Side(style="thin"),
@@ -196,14 +198,14 @@ center_align = Alignment(
     vertical="center"
 )
 
-# Header formatting
+# Apply Header Styling
 for cell in ws[1]:
     cell.fill = header_fill
     cell.font = header_font
     cell.border = thin_border
     cell.alignment = center_align
 
-# Data formatting
+# Apply Borders to All Data
 for row in ws.iter_rows(
     min_row=2,
     max_row=ws.max_row,
@@ -213,7 +215,7 @@ for row in ws.iter_rows(
         cell.border = thin_border
         cell.alignment = center_align
 
-# Auto column width
+# Auto Column Width
 for column_cells in ws.columns:
     max_length = 0
     column_letter = column_cells[0].column_letter
@@ -232,7 +234,7 @@ for column_cells in ws.columns:
 
 wb.save(file_name)
 
-print(f"\n✅ Report Generated: {file_name}")
+print(f"\n Report Generated: {file_name}")
 
 
 # ==========================
