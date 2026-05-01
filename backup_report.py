@@ -126,7 +126,7 @@ for v in vaults:
             })
 
     except Exception as e:
-        print(f"❌ Error in {v['vault_name']}: {e}")
+        print(f" Error in {v['vault_name']}: {e}")
 
 
 # ==========================
@@ -135,7 +135,7 @@ for v in vaults:
 df = pd.DataFrame(data)
 
 if df.empty:
-    print("❌ No backup data found. Check Azure permissions.")
+    print(" No backup data found. Check Azure permissions.")
     exit()
 
 df = df[
@@ -224,7 +224,7 @@ for column_cells in ws.columns:
 
 wb.save(file_name)
 
-print(f"\n✅ Report Generated: {file_name}")
+print(f"\n Report Generated: {file_name}")
 
 
 # ==========================
@@ -262,7 +262,7 @@ if non_protected_servers:
     server_list = ", ".join(non_protected_servers)
 
     notes.append(
-        f"The following servers — {server_list} — backups are in non-protected state."
+        f"The following servers — {server_list} : backups are in non-protected state."
     )
 
 # Health Issues
@@ -287,7 +287,7 @@ if not health_issue_servers.empty:
         server_list = ", ".join(servers)
 
         notes.append(
-            f"The following servers — {server_list} — have health check issues ({status})."
+            f"The following servers — {server_list} : have health check issues ({status})."
         )
 
 # Resource Issues
@@ -312,7 +312,7 @@ if not resource_issue_servers.empty:
         server_list = ", ".join(servers)
 
         notes.append(
-            f"The following servers — {server_list} — are in {state} state."
+            f"The following servers — {server_list} : are in {state} state."
         )
 
 # Final Note Section
