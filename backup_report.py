@@ -94,21 +94,17 @@ for v in vaults:
             # Clean Backup Item Name
             backup_item_name = item.name.split(";")[-1] if item.name else "N/A"
 
-            # Latest Recovery Point (Date only)
+            # Latest Recovery Point
             last_rp = getattr(props, "last_recovery_point", None)
             if last_rp:
                 last_rp = last_rp.strftime("%Y-%m-%d")
             else:
                 last_rp = "N/A"
 
-            # ==========================
-            # PROTECTION STATE
-            # ==========================
+            # Protection State
             protection_state = getattr(props, "protection_state", "N/A")
 
-            # ==========================
-            # RESOURCE STATE
-            # ==========================
+            # Resource State
             resource_state = getattr(props, "resource_state", None)
 
             if not resource_state:
@@ -117,9 +113,7 @@ for v in vaults:
                 else:
                     resource_state = "VM Active"
 
-            # ==========================
-            # APPEND DATA
-            # ==========================
+            # Append
             data.append({
                 "Backup Item": backup_item_name,
                 "Resource Group": resource_group,
@@ -143,7 +137,6 @@ df = pd.DataFrame(data)
 if df.empty:
     print("❌ No backup data found. Check Azure permissions.")
     exit()
-
 
 df = df[
     [
@@ -172,19 +165,17 @@ df.to_excel(file_name, index=False)
 wb = load_workbook(file_name)
 ws = wb.active
 
-# Header Style
 header_fill = PatternFill(
-    start_color="87CEEB",   # Sky blue
+    start_color="87CEEB",
     end_color="87CEEB",
     fill_type="solid"
 )
 
 header_font = Font(
     bold=True,
-    color="000000"  # Black
+    color="000000"
 )
 
-# Border Style
 thin_border = Border(
     left=Side(style="thin"),
     right=Side(style="thin"),
@@ -192,20 +183,19 @@ thin_border = Border(
     bottom=Side(style="thin")
 )
 
-# Alignment
 center_align = Alignment(
     horizontal="center",
     vertical="center"
 )
 
-# Apply Header Styling
+# Header
 for cell in ws[1]:
     cell.fill = header_fill
     cell.font = header_font
     cell.border = thin_border
     cell.alignment = center_align
 
-# Apply Borders to All Data
+# Data
 for row in ws.iter_rows(
     min_row=2,
     max_row=ws.max_row,
@@ -215,7 +205,7 @@ for row in ws.iter_rows(
         cell.border = thin_border
         cell.alignment = center_align
 
-# Auto Column Width
+# Auto width
 for column_cells in ws.columns:
     max_length = 0
     column_letter = column_cells[0].column_letter
@@ -234,7 +224,81 @@ for column_cells in ws.columns:
 
 wb.save(file_name)
 
-print(f"\n Report Generated: {file_name}")
+print(f"\n✅ Report Generated: {file_name}")
+
+
+# ==========================
+# BUILD MAIL SUMMARY
+# ==========================
+total_backup_items = len(df)
+
+successful_backup_items = len(
+    df[
+        (df["Health Check Status"].str.lower() == "passed") &
+        (df["Protection State"].str.lower() == "protected")
+    ]
+)
+
+non_protected_items = df[
+    df["Protection State"].str.lower() != "protected"
+]
+
+failed_backup_items = len(non_protected_items)
+
+non_protected_servers = non_protected_items["Azure Resource"].tolist()
+
+if non_protected_servers:
+    server_list = ", ".join(non_protected_servers)
+    note_section = f"""
+    <p><b>Note:</b></p>
+    <p>
+    The following servers — {server_list} —
+    backups are in non-protected state.
+    </p>
+    """
+else:
+    note_section = """
+    <p><b>Note:</b></p>
+    <p>All backup items are currently protected.</p>
+    """
+
+
+# ==========================
+# EMAIL BODY
+# ==========================
+email_html_body = f"""
+<p>Hi Sam,</p>
+
+<p>
+Please find the attached report for the Weekly Backup.
+Below is the status of all backup items.
+</p>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
+    <tr style="background-color:#1F4E78; color:white;">
+        <th>Backup Status</th>
+        <th>Count</th>
+    </tr>
+    <tr>
+        <td><b>Total Backup Items</b></td>
+        <td>{total_backup_items}</td>
+    </tr>
+    <tr>
+        <td><b>Successful Backup Items</b></td>
+        <td>{successful_backup_items}</td>
+    </tr>
+    <tr>
+        <td><b>Failed / Non-Protected Items</b></td>
+        <td>{failed_backup_items}</td>
+    </tr>
+</table>
+
+<br>
+
+{note_section}
+
+<p>Regards,<br>Automation System</p>
+"""
 
 
 # ==========================
@@ -272,11 +336,7 @@ def send_email_with_attachment():
             "subject": "Weekly Backup Explorer Report",
             "body": {
                 "contentType": "HTML",
-                "content": """
-                <p>Hello Team,</p>
-                <p>Please find attached the latest Backup Explorer Report.</p>
-                <p>Regards,<br>Sayan Karmakar</p>
-                """
+                "content": email_html_body
             },
             "toRecipients": [
                 {
